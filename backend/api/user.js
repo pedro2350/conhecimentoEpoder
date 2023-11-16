@@ -12,8 +12,11 @@ module.exports = app => {
        const user = { ...req.body }
        if(req.params.id) user.id = req.params.id
 
+       if(!req.originalUrl.startsWith('/users')) user.admin = false
+       if(!req.user || !req.user.admin) user.admin = false
+
        try {
-        existsOrError(user.nome, 'Nome não informado!')
+        existsOrError(user.name, 'Nome não informado!')
         existsOrError(user.email, 'E-mail não informado!')
         existsOrError(user.password, 'Senha não informada!')
         existsOrError(user.confirmPassword, 'Confirmação de senha inválida!')
@@ -36,6 +39,7 @@ module.exports = app => {
         app.db('users')
         .update(user)
         .where({ id: user.id })
+        .whereNull('deletedAt')
         .then(_=> res.status(204).send())
         .catch(err => res.status(500).send(err))
        } else {
@@ -49,9 +53,27 @@ module.exports = app => {
     const get = (req, res) => {
         app.db('users')
           .select('id', 'name', 'email', 'admin')
+          .whereNull('deletedAt')
           .then(users => res.json(users))
           .catch(err => res.status(500).send(err))
     }
 
-    return { save, get }
+    const remove = async (req, res) => {
+      try {
+         const articles = await app.db('articles')
+            .where({ userId: req.params.id })
+         notExistsOrError(articles, 'Usuário possui artigos.')
+
+      const rowsUpdated = await app.db('users')
+      .update({deletedAt: new Date()})
+      .where({ id: req.params.id })
+      existsOrError(rowsUpdated, 'Usuário não encontrado...')
+
+      res.status(204).send()
+      } catch(e) {
+         res.status(400).send(e)
+      }
+    }
+
+    return { save, get, remove }
 }
